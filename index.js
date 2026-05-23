@@ -13,25 +13,19 @@ const path = require('path');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
-const tempDir = path.resolve(__dirname, 'leesha_v4');
+const tempDir = path.resolve(__dirname, 'leesha_v5');
 
-// ==========================================
-//   🧹 AUTO-CLEANUP (The Railway Fix)
-// ==========================================
+// Auto-cleanup on start
 async function clearSessions() {
     try {
         if (fs.existsSync(tempDir)) {
-            await fs.emptyDir(tempDir); // Wipes all old files
-            console.log("♻️ Railway Cache Cleared: All old sessions deleted.");
+            await fs.emptyDir(tempDir);
+            console.log("♻️ Cache Wiped - Fresh Start");
         } else {
             await fs.ensureDir(tempDir);
         }
-    } catch (err) {
-        console.log("Cleanup Error: ", err);
-    }
+    } catch (err) {}
 }
-
-// Run cleanup immediately on start
 clearSessions();
 
 app.get('/', (req, res) => {
@@ -43,9 +37,7 @@ app.get('/pair', async (req, res) => {
     if (!num) return res.status(400).json({ error: "Number required" });
 
     num = num.replace(/[^0-9]/g, '');
-    
-    // Create a totally unique ID for this attempt
-    const sessionID = `ID_${num}_${Math.floor(Math.random() * 10000)}`;
+    const sessionID = `V5_${num}_${Math.floor(Math.random() * 9999)}`;
     const sessionFolder = path.join(tempDir, sessionID);
 
     try {
@@ -60,12 +52,17 @@ app.get('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: "fatal" }),
-            browser: ["Chrome (Linux)", "", ""], 
-            syncFullHistory: false
+            // --- THE GHOST IDENTITY BYPASS ---
+            browser: Browsers.macOS("Safari"), // Much higher success rate than Chrome Linux
+            syncFullHistory: false,
+            markOnlineOnConnect: true,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0,
+            // ---------------------------------
         });
 
         if (!conn.authState.creds.registered) {
-            await delay(3000); 
+            await delay(4000); // Wait for the handshake to fully settle
             const code = await conn.requestPairingCode(num);
             if (!res.headersSent) {
                 res.json({ code: code });
@@ -78,8 +75,8 @@ app.get('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update;
 
             if (connection === 'open') {
-                console.log(`[${num}] SUCCESS!`);
-                await delay(7000);
+                console.log(`[${num}] CONNECTED!`);
+                await delay(8000); // Give it time to generate the DM message
                 
                 const credsFile = path.join(sessionFolder, 'creds.json');
                 if (fs.existsSync(credsFile)) {
@@ -88,21 +85,19 @@ app.get('/pair', async (req, res) => {
                     const finalID = `QueenLeesha~${sessionStr}`;
                     
                     const msg = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
-                                `📦 *Your Session ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
-                                `🚀 *Copy and Paste this ID into your bot variables.*`;
+                                `✅ *Success! Your Session ID is below:*\n\n\`\`\`${finalID}\`\`\`\n\n` +
+                                `🚀 *Powered by devtrust*`;
 
                     await conn.sendMessage(conn.user.id, { text: msg });
                 }
                 
-                // Cleanup current session immediately after successful link
-                await delay(2000);
+                await delay(3000);
                 conn.end();
                 await fs.remove(sessionFolder);
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                // If it fails or times out, delete the folder so the next attempt is clean
                 if (reason !== 408) {
                     await fs.remove(sessionFolder).catch(() => {});
                 }
@@ -110,9 +105,9 @@ app.get('/pair', async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Pairing Error:", err);
-        if (!res.headersSent) res.status(500).json({ error: "Server error. Refresh." });
+        console.error(err);
+        if (!res.headersSent) res.status(500).json({ error: "Server error. Try again." });
     }
 });
 
-app.listen(PORT, () => console.log(`Queen Leesha V4 active on ${PORT}`));
+app.listen(PORT, () => console.log(`Queen Leesha V5 Active`));
