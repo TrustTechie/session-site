@@ -4,7 +4,8 @@ const {
     useMultiFileAuthState, 
     delay, 
     makeCacheableSignalKeyStore, 
-    Browsers 
+    Browsers,
+    fetchLatestBaileysVersion 
 } = require("@whiskeysockets/baileys");
 const pino = require('pino');
 const fs = require('fs-extra');
@@ -12,36 +13,36 @@ const path = require('path');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
-
-// Ensure temp directory exists and is writable
 const tempDir = path.resolve(__dirname, 'temp');
 fs.ensureDirSync(tempDir);
 
 app.get('/pair', async (req, res) => {
     let num = req.query.number;
-    if (!num) return res.status(400).json({ error: "Number is required" });
+    if (!num) return res.status(400).json({ error: "Number required" });
 
-    // Clean number format
     num = num.replace(/[^0-9]/g, '');
     const sessionID = `session_${Date.now()}`;
     const sessionFolder = path.join(tempDir, sessionID);
 
     try {
         const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
+        const { version } = await fetchLatestBaileysVersion(); // Sync with latest WA version
 
         const conn = makeWASocket({
+            version,
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
             },
             printQRInTerminal: false,
             logger: pino({ level: "fatal" }),
-            browser: Browsers.ubuntu("Chrome") // Important for Railway
+            browser: Browsers.macOS("Desktop"), // Changed to macOS Desktop for better stability
+            syncFullHistory: false, // Speeds up the login process significantly
+            markOnlineOnConnect: true
         });
 
-        // Generate Pairing Code
         if (!conn.authState.creds.registered) {
-            await delay(1500); // Wait for socket to init
+            await delay(2000); // Give it time to stabilize
             const code = await conn.requestPairingCode(num);
             if (!res.headersSent) {
                 res.json({ code: code });
@@ -54,46 +55,40 @@ app.get('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update;
 
             if (connection === 'open') {
+                console.log(`[${num}] Successfully Logged In!`);
                 await delay(5000);
                 
-                // --- GETTING THE STRING (Session ID) ---
+                // --- GENERATING THE SESSION ID ---
                 const credsFile = path.join(sessionFolder, 'creds.json');
                 const creds = await fs.readJSON(credsFile);
-                
-                // Turn JSON into Base64 string
                 const sessionStr = Buffer.from(JSON.stringify(creds)).toString('base64');
                 const finalID = `QueenLeesha~${sessionStr}`;
                 
-                const msg = `👑 *QUEEN LEESHA MD V1 SESSION* 👑\n\n` +
+                const msg = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
                             `📦 *Your Session ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
-                            `⚠️ *Keep this safe!* Copy and paste this ID into your bot's CONFIG.\n\n` +
-                            `🚀 *Powered by devtrust*`;
+                            `🚀 *Copy this string and use it for hosting.*`;
 
                 await conn.sendMessage(conn.user.id, { text: msg });
                 
-                // Close socket and delete temp files to keep Railway clean
-                await delay(2000);
+                // Auto-cleanup
+                await delay(3000);
                 conn.end();
                 await fs.remove(sessionFolder);
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                if (reason === 401) {
-                    console.log(`[${num}] Connection unauthorized, folder deleted.`);
-                    await fs.remove(sessionFolder);
+                // If it closes due to an error, we clear the temp folder
+                if (reason !== 408) { 
+                    await fs.remove(sessionFolder).catch(() => {});
                 }
             }
         });
 
     } catch (err) {
-        console.error("Pairing Error:", err);
-        if (!res.headersSent) {
-            res.status(500).json({ error: "Failed to generate code. Check server logs." });
-        }
+        console.error("Critical Error:", err);
+        if (!res.headersSent) res.status(500).json({ error: "Server busy. Try again." });
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Stable Server on Port ${PORT}`));
