@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const pino = require("pino");
+const axios = require("axios");
 
 const {
 default: makeWASocket,
@@ -18,11 +19,27 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
-// ================================
+// ==============================
+// ACTIVE SOCKETS
+// ==============================
+
+const activeSockets = {};
+
+// ==============================
+// HOME
+// ==============================
+
+app.get("/", (req, res) => {
+res.send("QUEEN LEESHA SESSION GENERATOR ACTIVE");
+});
+
+// ==============================
 // PAIR ROUTE
-// ================================
+// ==============================
 
 app.post("/pair", async (req, res) => {
+
+try {
 
 const num = req.body.number;
 
@@ -35,6 +52,17 @@ msg: "Enter WhatsApp number"
 
 const cleanedNum =
 num.replace(/[^0-9]/g, "");
+
+if (cleanedNum.startsWith("0")) {
+return res.json({
+status: false,
+msg: "Use country code example 234..."
+});
+}
+
+// ==============================
+// CREATE SESSION ID
+// ==============================
 
 const sessionId =
 Date.now().toString();
@@ -51,12 +79,19 @@ if (!fs.existsSync(sessionPath)) {
 fs.mkdirSync(sessionPath);
 }
 
-// START SOCKET
+// ==============================
+// AUTH
+// ==============================
+
 const { state, saveCreds } =
 await useMultiFileAuthState(sessionPath);
 
 const { version } =
 await fetchLatestBaileysVersion();
+
+// ==============================
+// SOCKET
+// ==============================
 
 const sock = makeWASocket({
 version,
@@ -66,15 +101,21 @@ auth: state,
 browser: Browsers.ubuntu("Chrome"),
 
 markOnlineOnConnect: false,
-syncFullHistory: false
+syncFullHistory: false,
+defaultQueryTimeoutMs: 60000,
+connectTimeoutMs: 60000,
+keepAliveIntervalMs: 10000
 });
+
+// SAVE SOCKET
+activeSockets[sessionId] = sock;
 
 // SAVE CREDS
 sock.ev.on("creds.update", saveCreds);
 
-// ================================
-// GENERATE CODE
-// ================================
+// ==============================
+// GENERATE PAIR CODE
+// ==============================
 
 if (!sock.authState.creds.registered) {
 
@@ -97,11 +138,11 @@ code
 
 } catch (err) {
 
-console.log(err);
+console.log("PAIR ERROR:", err);
 
 return res.json({
 status: false,
-msg: "Failed to generate code"
+msg: "Failed to generate pair code"
 });
 
 }
@@ -110,9 +151,9 @@ msg: "Failed to generate code"
 
 }
 
-// ================================
+// ==============================
 // CONNECTION UPDATE
-// ================================
+// ==============================
 
 sock.ev.on("connection.update", async (update) => {
 
@@ -123,56 +164,78 @@ lastDisconnect
 
 console.log(update);
 
+// ==============================
+// OPEN
+// ==============================
+
 if (connection === "open") {
 
-console.log("CONNECTED SUCCESSFULLY");
+console.log("CONNECTED");
 
-// WAIT SMALL
+// WAIT FOR FULL AUTH SAVE
 await new Promise(resolve =>
-setTimeout(resolve, 5000)
+setTimeout(resolve, 15000)
 );
 
 try {
 
+sock.ev.flush();
+
 const credsPath =
 path.join(sessionPath, "creds.json");
 
+// CHECK CREDS
 if (!fs.existsSync(credsPath)) {
-console.log("creds.json missing");
+console.log("CREDS NOT FOUND");
 return;
 }
 
 // READ CREDS
 const creds =
-fs.readFileSync(credsPath);
+fs.readFileSync(credsPath, "utf8");
 
+if (!creds || creds.length < 50) {
+console.log("INVALID CREDS");
+return;
+}
+
+// ENCODE
 const encoded =
-Buffer.from(creds).toString("base64");
+Buffer.from(
+JSON.stringify(JSON.parse(creds))
+).toString("base64");
 
-// SEND MESSAGE
+// SEND ENCODED
 await sock.sendMessage(
 sock.user.id,
 {
 text:
-`✅ Session Generated Successfully
+`✅ QUEEN LEESHA SESSION CONNECTED
 
-🔐 Encoded Session:
+🔐 ENCODED SESSION:
 
 ${encoded}`
 }
 );
 
-// SEND FILE
+// SEND CREDS.JSON
 await sock.sendMessage(
 sock.user.id,
 {
-document: fs.readFileSync(credsPath),
+document: Buffer.from(creds),
 mimetype: "application/json",
 fileName: "creds.json"
 }
 );
 
 console.log("SESSION SENT");
+
+// OPTIONAL CLEANUP
+setTimeout(() => {
+
+delete activeSockets[sessionId];
+
+}, 60000);
 
 } catch (err) {
 
@@ -182,21 +245,21 @@ console.log("SEND ERROR:", err);
 
 }
 
-// ================================
+// ==============================
 // CLOSE
-// ================================
+// ==============================
 
 if (connection === "close") {
 
 let reason =
 new Boom(lastDisconnect?.error)
-?.output.statusCode;
+?.output?.statusCode;
 
 console.log("CLOSED:", reason);
 
 if (reason !== DisconnectReason.loggedOut) {
 
-console.log("Reconnecting...");
+console.log("Socket disconnected");
 
 }
 
@@ -204,23 +267,51 @@ console.log("Reconnecting...");
 
 });
 
+} catch (err) {
+
+console.log("MAIN ERROR:", err);
+
+return res.json({
+status: false,
+msg: "Server Error"
 });
 
-// ================================
-// HOME
-// ================================
+}
 
-app.get("/", (req, res) => {
-res.send("QUEEN LEESHA SESSION GENERATOR ACTIVE");
 });
 
+// ==============================
+// SELF PING
+// ==============================
+
+
 // ================================
+
+setInterval(async () => {
+
+try {
+
+await axios.get("https://session-site-production-f0cb.up.railway.app");
+
+console.log("SELF PING");
+
+} catch (err) {
+
+console.log("PING FAILED");
+
+}
+
+}, 840000);
+
+// ==============================
 // START SERVER
-// ================================
+// ==============================
 
 const PORT =
 process.env.PORT || 3000;
 
 app.listen(PORT, () => {
+
 console.log(`Server running on ${PORT}`);
+
 });
