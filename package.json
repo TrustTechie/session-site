@@ -1,7 +1,7 @@
 {
-  "name": "queen-leesha-pairing-site",
+  "name": "queen-leesha-pair",
   "version": "1.0.0",
-  "description": "Pairing Code Generator for Queen Leesha MD",
+  "description": "WhatsApp Pairing Code Server",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
