@@ -1,27 +1,44 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Queen Session Generator</title>
-  <link rel="stylesheet" href="style.css">
+    <title>Queen Leesha MD Pairing</title>
+    <style>
+        body { background: #0f0c29; color: white; font-family: sans-serif; text-align: center; padding-top: 50px; }
+        input { padding: 10px; border-radius: 5px; border: none; width: 250px; }
+        button { padding: 10px 20px; background: #ff007f; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        #codeDisplay { font-size: 2em; margin-top: 20px; color: #00ffcc; letter-spacing: 5px; }
+    </style>
 </head>
 <body>
+    <h1>👑 Queen Leesha MD-V1</h1>
+    <p>Enter your phone number with country code (e.g. 234xxx)</p>
+    <input type="text" id="number" placeholder="2347041560392">
+    <button onclick="getPairingCode()">Get Code</button>
+    <div id="codeDisplay"></div>
+    <p id="status"></p>
 
-<div class="box">
-  <h1>WhatsApppp Session Generator</h1>
+    <script>
+        async function getPairingCode() {
+            const num = document.getElementById('number').value;
+            const display = document.getElementById('codeDisplay');
+            const status = document.getElementById('status');
+            
+            status.innerText = "Generating code... please wait";
+            display.innerText = "";
 
-  <input
-    type="number"
-    id="number"
-    placeholder="234xxxxxxxxxx"
-  >
-
-  <button onclick="generate()">
-    Generate Code
-  </button>
-
-  <div id="result"></div>
-</div>
-
-<script src="script.js"></script>
+            try {
+                const response = await fetch(`/pair?number=${num}`);
+                const data = await response.json();
+                if (data.code) {
+                    display.innerText = data.code;
+                    status.innerText = "Enter this code on your WhatsApp Notification.";
+                } else {
+                    status.innerText = "Error: " + data.error;
+                }
+            } catch (e) {
+                status.innerText = "Failed to connect to server.";
+            }
+        }
+    </script>
 </body>
 </html>
