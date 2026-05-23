@@ -1,42 +1,52 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Queen Leesha MD Pairing</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queen Leesha Pairing</title>
     <style>
-        body { background: #0f0c29; color: white; font-family: sans-serif; text-align: center; padding-top: 50px; }
-        input { padding: 10px; border-radius: 5px; border: none; width: 250px; }
-        button { padding: 10px 20px; background: #ff007f; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        #codeDisplay { font-size: 2em; margin-top: 20px; color: #00ffcc; letter-spacing: 5px; }
+        body { background-color: #0d1117; color: #ffffff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background-color: #161b22; padding: 40px; border-radius: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); width: 350px; text-align: center; border: 1px solid #30363d; }
+        h2 { color: #ff007f; margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: white; box-sizing: border-box; }
+        button { background-color: #ff007f; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; }
+        button:hover { background-color: #d0006b; }
+        #code { font-size: 24px; font-weight: bold; color: #00ffcc; margin-top: 20px; letter-spacing: 3px; }
+        #status { margin-top: 15px; font-size: 14px; color: #8b949e; }
     </style>
 </head>
 <body>
-    <h1>👑 Queen Leesha MD-V1</h1>
-    <p>Enter your phone number with country code (e.g. 234xxx)</p>
-    <input type="text" id="number" placeholder="2347041560392">
-    <button onclick="getPairingCode()">Get Code</button>
-    <div id="codeDisplay"></div>
-    <p id="status"></p>
+    <div class="card">
+        <h2>👑 Queen Leesha</h2>
+        <p>Enter number with country code</p>
+        <input type="text" id="phone" placeholder="2347041560392">
+        <button onclick="getCode()">Get Pairing Code</button>
+        <div id="code"></div>
+        <div id="status"></div>
+    </div>
 
     <script>
-        async function getPairingCode() {
-            const num = document.getElementById('number').value;
-            const display = document.getElementById('codeDisplay');
-            const status = document.getElementById('status');
+        async function getCode() {
+            const num = document.getElementById('phone').value;
+            const codeDiv = document.getElementById('code');
+            const statusDiv = document.getElementById('status');
             
-            status.innerText = "Generating code... please wait";
-            display.innerText = "";
+            if(!num) return alert("Enter a number!");
+            
+            codeDiv.innerText = "";
+            statusDiv.innerText = "Requesting code... ⏳";
 
             try {
-                const response = await fetch(`/pair?number=${num}`);
-                const data = await response.json();
-                if (data.code) {
-                    display.innerText = data.code;
-                    status.innerText = "Enter this code on your WhatsApp Notification.";
+                const res = await fetch(`/pair?number=${num}`);
+                const data = await res.json();
+                if(data.code) {
+                    codeDiv.innerText = data.code;
+                    statusDiv.innerText = "Notification sent! Enter code on your phone.";
                 } else {
-                    status.innerText = "Error: " + data.error;
+                    statusDiv.innerText = "Error: " + (data.error || "Unknown");
                 }
             } catch (e) {
-                status.innerText = "Failed to connect to server.";
+                statusDiv.innerText = "Server Unreachable.";
             }
         }
     </script>
