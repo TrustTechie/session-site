@@ -230,11 +230,11 @@ res.send("SESSION GENERATOR ACTIVE");
 // SELF PING
 // ================================
 
-setInterval(async () => {
+/*setInterval(async () => {
 
 try {
 
-await axios.get("https://session-site-production-84ed.up.railway.app");
+await axios.get("");
 
 console.log("SELF PING");
 
@@ -244,7 +244,7 @@ console.log("PING FAILED");
 
 }
 
-}, 840000);
+}, 840000);*/
 
 // ================================
 // START SERVER
