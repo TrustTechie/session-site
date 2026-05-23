@@ -7,24 +7,28 @@ const {
     useMultiFileAuthState, 
     delay, 
     makeCacheableSignalKeyStore, 
-    Browsers 
+    Browsers,
+    DisconnectReason 
 } = require("@whiskeysockets/baileys");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const sessionDir = path.join(__dirname, 'leesha_v8');
 
-// Serve the index.html file
+// Wipe Railway junk data on startup
+fs.emptyDirSync(sessionDir);
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.get('/pair', async (req, res) => {
-    let phone = req.query.number;
-    if (!phone) return res.json({ error: "Please enter a number" });
-    phone = phone.replace(/[^0-9]/g, '');
+    let num = req.query.number;
+    if (!num) return res.json({ error: "Number required" });
+    num = num.replace(/[^0-9]/g, '');
 
-    const sessionID = `Session_${Date.now()}`;
-    const folder = path.join(__dirname, 'auth', sessionID);
+    const id = `LINK_${num}_${Date.now()}`;
+    const folder = path.join(sessionDir, id);
 
     try {
         const { state, saveCreds } = await useMultiFileAuthState(folder);
@@ -36,22 +40,21 @@ app.get('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: "fatal" }),
-            browser: Browsers.macOS("Safari"),
-            // --- CRITICAL FIX FOR INFINITE LOADING ---
-            syncFullHistory: false, 
-            shouldSyncHistoryMessage: () => false, 
-            // ------------------------------------------
-            connectTimeoutMs: 60000,
+            browser: Browsers.macOS("Chrome"), // Stable identity
+            
+            // --- V8 FORCE-LINK LOGIC ---
+            syncFullHistory: false,
+            shouldSyncHistoryMessage: () => false,
+            connectTimeoutMs: 120000, // Wait 2 minutes for handshake
             defaultQueryTimeoutMs: 0,
-            keepAliveIntervalMs: 10000,
-            emitOwnEvents: true,
-            fireInitQueries: false,
-            generateHighQualityLinkPreview: false
+            keepAliveIntervalMs: 20000,
+            generateHighQualityLinkPreview: false,
+            // ---------------------------
         });
 
         if (!sock.authState.creds.registered) {
-            await delay(1500);
-            const code = await sock.requestPairingCode(phone);
+            await delay(3000);
+            const code = await sock.requestPairingCode(num);
             if (!res.headersSent) res.json({ code: code });
         }
 
@@ -61,31 +64,32 @@ app.get('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update;
 
             if (connection === 'open') {
-                console.log(`[${phone}] Connected!`);
-                await delay(5000); // Wait for the handshake to finish
+                console.log(`[${num}] LOGGED IN!`);
+                await delay(10000); // Wait for the phone to stop "Logging in"
 
-                const credsFile = path.join(folder, 'creds.json');
-                const creds = await fs.readJSON(credsFile);
+                const creds = await fs.readJSON(path.join(folder, 'creds.json'));
                 const sessionStr = Buffer.from(JSON.stringify(creds)).toString('base64');
                 const finalID = `QueenLeesha~${sessionStr}`;
 
-                const text = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
-                             `✅ *LINK SUCCESSFUL!*\n\n` +
-                             `📦 *YOUR SESSION ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
-                             `🚀 *Instructions:* Copy the long string above and use it to host your bot. Keep it private!`;
+                const resultText = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
+                                   `✅ *LINK SUCCESSFUL!*\n\n` +
+                                   `📦 *SESSION ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
+                                   `🚀 *Instructions:* Copy the ID above and use it to start your bot. Keep it safe!\n\n` +
+                                   `© _devtrust_`;
 
-                await sock.sendMessage(sock.user.id, { text });
+                // Send to the user's own number
+                await sock.sendMessage(sock.user.id, { text: resultText });
                 
-                // Cleanup to save Railway memory
-                await delay(2000);
+                // Disconnect gracefully
+                await delay(5000);
                 sock.end();
                 await fs.remove(folder).catch(() => {});
             }
 
             if (connection === 'close') {
-                // If the link fails, wipe the folder so we can try fresh next time
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                if (reason !== 408) {
+                if (reason !== DisconnectReason.loggedOut) {
+                    // Cleanup failed folder
                     await fs.remove(folder).catch(() => {});
                 }
             }
@@ -93,8 +97,8 @@ app.get('/pair', async (req, res) => {
 
     } catch (err) {
         console.error(err);
-        if (!res.headersSent) res.status(500).json({ error: "Server Error. Refresh." });
+        if (!res.headersSent) res.status(500).json({ error: "Server error. Refresh." });
     }
 });
 
-app.listen(PORT, () => console.log(`Queen Leesha running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Queen Leesha V8 live on ${PORT}`));
