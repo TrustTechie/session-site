@@ -13,22 +13,19 @@ const path = require('path');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
-const tempDir = path.resolve(__dirname, 'leesha_tmp'); // Changed name to avoid permission issues
+const tempDir = path.resolve(__dirname, 'leesha_sessions');
 fs.ensureDirSync(tempDir);
 
-// --- 1. SERVE THE WEBSITE ---
-// This part fixes the "Cannot GET /" error
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- 2. PAIRING LOGIC ---
 app.get('/pair', async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: "Number required" });
 
     num = num.replace(/[^0-9]/g, '');
-    const sessionID = `session_${Date.now()}`;
+    const sessionID = `session_${num}_${Date.now()}`;
     const sessionFolder = path.join(tempDir, sessionID);
 
     try {
@@ -43,13 +40,16 @@ app.get('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: "fatal" }),
-            browser: Browsers.macOS("Desktop"),
+            // --- THE STABILITY FIX ---
+            browser: ["Ubuntu", "Chrome", "20.0.04"], // Standard identity
             syncFullHistory: false,
-            markOnlineOnConnect: true
+            generateHighQualityLinkPreview: true,
+            connectTimeoutMs: 60000, // 60 seconds
+            keepAliveIntervalMs: 10000
         });
 
         if (!conn.authState.creds.registered) {
-            await delay(2000);
+            await delay(3000); // Increased delay for Railway stability
             const code = await conn.requestPairingCode(num);
             if (!res.headersSent) {
                 res.json({ code: code });
@@ -62,37 +62,41 @@ app.get('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update;
 
             if (connection === 'open') {
-                console.log(`[${num}] Linked!`);
+                console.log(`[${num}] Session Linked Successfully!`);
                 await delay(5000);
                 
                 const credsFile = path.join(sessionFolder, 'creds.json');
-                const creds = await fs.readJSON(credsFile);
-                const sessionStr = Buffer.from(JSON.stringify(creds)).toString('base64');
-                const finalID = `QueenLeesha~${sessionStr}`;
-                
-                const msg = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
-                            `📦 *Your Session ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
-                            `🚀 *Powered by devtrust*`;
+                if (fs.existsSync(credsFile)) {
+                    const creds = await fs.readJSON(credsFile);
+                    const sessionStr = Buffer.from(JSON.stringify(creds)).toString('base64');
+                    const finalID = `QueenLeesha~${sessionStr}`;
+                    
+                    const msg = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
+                                `✅ *Session Linked Successfully!*\n\n` +
+                                `📦 *Your Session ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
+                                `🚀 *Use this ID to host your bot.*`;
 
-                await conn.sendMessage(conn.user.id, { text: msg });
+                    await conn.sendMessage(conn.user.id, { text: msg });
+                }
                 
-                await delay(3000);
+                await delay(2000);
                 conn.end();
                 await fs.remove(sessionFolder);
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                if (reason !== 408) { 
+                // Delete failed sessions to prevent "Phone number mismatch" errors
+                if (reason === 401 || reason === 515) {
                     await fs.remove(sessionFolder).catch(() => {});
                 }
             }
         });
 
     } catch (err) {
-        console.error(err);
-        if (!res.headersSent) res.status(500).json({ error: "Try again later" });
+        console.error("Pairing Crash:", err);
+        if (!res.headersSent) res.status(500).json({ error: "Connection error. Refresh and try again." });
     }
 });
 
-app.listen(PORT, () => console.log(`Server live on ${PORT}`));
+app.listen(PORT, () => console.log(`Stable Server on ${PORT}`));
