@@ -13,14 +13,14 @@ const path = require('path');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
-const tempDir = path.resolve(__dirname, 'leesha_v6');
+const tempDir = path.resolve(__dirname, 'leesha_v7');
 
-// Auto-cleanup on start to keep Railway clean
+// Railway Wipe Logic
 async function clearSessions() {
     try {
         if (fs.existsSync(tempDir)) {
             await fs.emptyDir(tempDir);
-            console.log("♻️ Cache Cleared - Fresh Start Ready");
+            console.log("♻️ System Wiped - Fresh IP Handshake Ready");
         } else {
             await fs.ensureDir(tempDir);
         }
@@ -37,7 +37,7 @@ app.get('/pair', async (req, res) => {
     if (!num) return res.status(400).json({ error: "Number required" });
 
     num = num.replace(/[^0-9]/g, '');
-    const sessionID = `V6_${num}_${Math.floor(Math.random() * 1000)}`;
+    const sessionID = `V7_${num}_${Math.floor(Math.random() * 500)}`;
     const sessionFolder = path.join(tempDir, sessionID);
 
     try {
@@ -52,18 +52,22 @@ app.get('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: "fatal" }),
-            browser: Browsers.macOS("Safari"),
-            // --- THE INSTANT LINK FIX ---
-            syncFullHistory: false, // Don't download history
-            shouldSyncHistoryMessage: () => false, // SHUT DOWN history sync completely
-            linkPreviewHighQuality: false, 
-            markOnlineOnConnect: true,
-            connectTimeoutMs: 60000,
-            // ----------------------------
+            browser: ["Mac OS", "Chrome", "121.0.6167.184"], // High success version
+            
+            // --- THE V7 HANDSHAKE BYPASS ---
+            syncFullHistory: false,
+            shouldSyncHistoryMessage: () => false,
+            patchMessageBeforeSending: (message) => { return message; },
+            linkPreviewHighQuality: false,
+            markOnlineOnConnect: false, // Don't try to go online until finished
+            connectTimeoutMs: 120000, // Wait 2 minutes for slow Railway handshake
+            defaultQueryTimeoutMs: 0,
+            retryRequestDelayMs: 5000,
+            // -------------------------------
         });
 
         if (!conn.authState.creds.registered) {
-            await delay(3000); 
+            await delay(4000); 
             const code = await conn.requestPairingCode(num);
             if (!res.headersSent) {
                 res.json({ code: code });
@@ -76,28 +80,26 @@ app.get('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update;
 
             if (connection === 'open') {
-                console.log(`[${num}] INSTANT LINK SUCCESS!`);
-                await delay(5000); // Wait for keys to save
+                console.log(`[${num}] V7 BYPASS SUCCESS!`);
+                await delay(10000); // Important: Wait longer for keys to finish writing
                 
                 const credsFile = path.join(sessionFolder, 'creds.json');
                 if (fs.existsSync(credsFile)) {
                     const creds = await fs.readJSON(credsFile);
-                    // Generate the String
                     const sessionStr = Buffer.from(JSON.stringify(creds)).toString('base64');
                     const finalID = `QueenLeesha~${sessionStr}`;
                     
                     const msg = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
                                 `✅ *Session Linked Successfully!*\n\n` +
                                 `📦 *Your Session ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
-                                `🚀 *Powered by devtrust*`;
+                                `🚀 *Copy and Paste this ID into your bot variables.*`;
 
                     await conn.sendMessage(conn.user.id, { text: msg });
                 }
                 
-                // Cleanup current session to save space
-                await delay(2000);
+                await delay(3000);
                 conn.end();
-                await fs.remove(sessionFolder);
+                await fs.remove(sessionFolder).catch(() => {});
             }
 
             if (connection === 'close') {
@@ -110,8 +112,8 @@ app.get('/pair', async (req, res) => {
 
     } catch (err) {
         console.error(err);
-        if (!res.headersSent) res.status(500).json({ error: "Server error. Refresh." });
+        if (!res.headersSent) res.status(500).json({ error: "API Timeout. Try again." });
     }
 });
 
-app.listen(PORT, () => console.log(`Queen Leesha V6 Active on ${PORT}`));
+app.listen(PORT, () => console.log(`Queen Leesha V7 Ready`));
