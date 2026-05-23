@@ -13,7 +13,7 @@ const path = require('path');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
-const tempDir = path.resolve(__dirname, 'leesha_sessions');
+const tempDir = path.resolve(__dirname, 'leesha_v4');
 fs.ensureDirSync(tempDir);
 
 app.get('/', (req, res) => {
@@ -25,7 +25,9 @@ app.get('/pair', async (req, res) => {
     if (!num) return res.status(400).json({ error: "Number required" });
 
     num = num.replace(/[^0-9]/g, '');
-    const sessionID = `session_${num}_${Date.now()}`;
+    
+    // Create a totally unique ID to avoid conflicts
+    const sessionID = `ID_${num}_${Math.floor(Math.random() * 10000)}`;
     const sessionFolder = path.join(tempDir, sessionID);
 
     try {
@@ -40,16 +42,15 @@ app.get('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: "fatal" }),
-            // --- THE STABILITY FIX ---
-            browser: ["Ubuntu", "Chrome", "20.0.04"], // Standard identity
+            // --- THE BYPASS IDENTITY ---
+            browser: ["Chrome (Linux)", "", ""], 
             syncFullHistory: false,
-            generateHighQualityLinkPreview: true,
-            connectTimeoutMs: 60000, // 60 seconds
-            keepAliveIntervalMs: 10000
+            // ---------------------------
+            getMessage: async () => { return { conversation: 'hi' } }
         });
 
         if (!conn.authState.creds.registered) {
-            await delay(3000); // Increased delay for Railway stability
+            await delay(3000); 
             const code = await conn.requestPairingCode(num);
             if (!res.headersSent) {
                 res.json({ code: code });
@@ -62,8 +63,8 @@ app.get('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update;
 
             if (connection === 'open') {
-                console.log(`[${num}] Session Linked Successfully!`);
-                await delay(5000);
+                console.log(`[${num}] SUCCESS!`);
+                await delay(7000); // Wait for internal sync
                 
                 const credsFile = path.join(sessionFolder, 'creds.json');
                 if (fs.existsSync(credsFile)) {
@@ -72,31 +73,31 @@ app.get('/pair', async (req, res) => {
                     const finalID = `QueenLeesha~${sessionStr}`;
                     
                     const msg = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
-                                `✅ *Session Linked Successfully!*\n\n` +
                                 `📦 *Your Session ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
-                                `🚀 *Use this ID to host your bot.*`;
+                                `🚀 *Copy and Paste this ID into your SESSION_ID variable.*`;
 
                     await conn.sendMessage(conn.user.id, { text: msg });
                 }
                 
+                // End connection and wipe temp files to prevent Railway errors
                 await delay(2000);
                 conn.end();
-                await fs.remove(sessionFolder);
+                await fs.remove(sessionFolder).catch(() => {});
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                // Delete failed sessions to prevent "Phone number mismatch" errors
-                if (reason === 401 || reason === 515) {
+                // If it wasn't a normal logout, clean the folder to allow retry
+                if (reason !== 408) {
                     await fs.remove(sessionFolder).catch(() => {});
                 }
             }
         });
 
     } catch (err) {
-        console.error("Pairing Crash:", err);
-        if (!res.headersSent) res.status(500).json({ error: "Connection error. Refresh and try again." });
+        console.error("Pairing Error:", err);
+        if (!res.headersSent) res.status(500).json({ error: "Server error. Refresh." });
     }
 });
 
-app.listen(PORT, () => console.log(`Stable Server on ${PORT}`));
+app.listen(PORT, () => console.log(`Queen Leesha V4 on ${PORT}`));
