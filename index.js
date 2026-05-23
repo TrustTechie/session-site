@@ -14,7 +14,25 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 const tempDir = path.resolve(__dirname, 'leesha_v4');
-fs.ensureDirSync(tempDir);
+
+// ==========================================
+//   🧹 AUTO-CLEANUP (The Railway Fix)
+// ==========================================
+async function clearSessions() {
+    try {
+        if (fs.existsSync(tempDir)) {
+            await fs.emptyDir(tempDir); // Wipes all old files
+            console.log("♻️ Railway Cache Cleared: All old sessions deleted.");
+        } else {
+            await fs.ensureDir(tempDir);
+        }
+    } catch (err) {
+        console.log("Cleanup Error: ", err);
+    }
+}
+
+// Run cleanup immediately on start
+clearSessions();
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -26,7 +44,7 @@ app.get('/pair', async (req, res) => {
 
     num = num.replace(/[^0-9]/g, '');
     
-    // Create a totally unique ID to avoid conflicts
+    // Create a totally unique ID for this attempt
     const sessionID = `ID_${num}_${Math.floor(Math.random() * 10000)}`;
     const sessionFolder = path.join(tempDir, sessionID);
 
@@ -42,11 +60,8 @@ app.get('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: "fatal" }),
-            // --- THE BYPASS IDENTITY ---
             browser: ["Chrome (Linux)", "", ""], 
-            syncFullHistory: false,
-            // ---------------------------
-            getMessage: async () => { return { conversation: 'hi' } }
+            syncFullHistory: false
         });
 
         if (!conn.authState.creds.registered) {
@@ -64,7 +79,7 @@ app.get('/pair', async (req, res) => {
 
             if (connection === 'open') {
                 console.log(`[${num}] SUCCESS!`);
-                await delay(7000); // Wait for internal sync
+                await delay(7000);
                 
                 const credsFile = path.join(sessionFolder, 'creds.json');
                 if (fs.existsSync(credsFile)) {
@@ -74,20 +89,20 @@ app.get('/pair', async (req, res) => {
                     
                     const msg = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
                                 `📦 *Your Session ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
-                                `🚀 *Copy and Paste this ID into your SESSION_ID variable.*`;
+                                `🚀 *Copy and Paste this ID into your bot variables.*`;
 
                     await conn.sendMessage(conn.user.id, { text: msg });
                 }
                 
-                // End connection and wipe temp files to prevent Railway errors
+                // Cleanup current session immediately after successful link
                 await delay(2000);
                 conn.end();
-                await fs.remove(sessionFolder).catch(() => {});
+                await fs.remove(sessionFolder);
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                // If it wasn't a normal logout, clean the folder to allow retry
+                // If it fails or times out, delete the folder so the next attempt is clean
                 if (reason !== 408) {
                     await fs.remove(sessionFolder).catch(() => {});
                 }
@@ -100,4 +115,4 @@ app.get('/pair', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Queen Leesha V4 on ${PORT}`));
+app.listen(PORT, () => console.log(`Queen Leesha V4 active on ${PORT}`));
