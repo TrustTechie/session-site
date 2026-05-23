@@ -14,7 +14,6 @@ const {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve the index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -24,12 +23,9 @@ app.get('/pair', async (req, res) => {
     if (!num) return res.json({ error: "Number is required" });
     num = num.replace(/[^0-9]/g, '');
 
-    // Every attempt gets a clean, unique folder
-    const sessionID = `Auth_${num}_${Date.now()}`;
-    const sessionFolder = path.join(__dirname, 'auth_sessions', sessionID);
-    
-    // Ensure parent directory exists
-    await fs.ensureDir(path.join(__dirname, 'auth_sessions'));
+    const sessionID = `Final_${num}_${Math.floor(Math.random() * 1000)}`;
+    const sessionFolder = path.join(__dirname, 'session_store', sessionID);
+    await fs.ensureDir(sessionFolder);
 
     try {
         const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
@@ -41,21 +37,27 @@ app.get('/pair', async (req, res) => {
             },
             printQRInTerminal: false,
             logger: pino({ level: "fatal" }),
-            // --- THE BYPASS IDENTITY ---
-            browser: [ 'Ubuntu', 'Chrome', '20.0.04' ], 
-            // ---------------------------
+            // --- THE 'DEVAFFEEZ' STYLE BROWSER BYPASS ---
+            browser: ["Chrome (Windows)", "Chrome", "121.0.6167.184"], 
+            // --------------------------------------------
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false,
-            connectTimeoutMs: 120000, // 2 minutes patience
+            connectTimeoutMs: 120000,
             defaultQueryTimeoutMs: 0,
             keepAliveIntervalMs: 30000,
         });
 
         if (!sock.authState.creds.registered) {
-            await delay(2500); 
-            console.log(`[LOG] Requesting code for: ${num}`);
-            const code = await sock.requestPairingCode(num);
-            if (!res.headersSent) res.json({ code: code });
+            // WAIT 5 SECONDS before requesting to avoid 405 error
+            await delay(5000); 
+            console.log(`[LOG] Generating code for: ${num}`);
+            try {
+                const code = await sock.requestPairingCode(num);
+                if (!res.headersSent) res.json({ code: code });
+            } catch (pairingError) {
+                console.error("[PAIR ERROR]", pairingError);
+                if (!res.headersSent) res.json({ error: "WhatsApp rejected the request (405). Try again in 5 mins." });
+            }
         }
 
         sock.ev.on('creds.update', saveCreds);
@@ -64,47 +66,37 @@ app.get('/pair', async (req, res) => {
             const { connection, lastDisconnect } = update;
 
             if (connection === 'open') {
-                console.log(`[SUCCESS] ${num} Linked! Generating String...`);
-                await delay(10000); // Wait for the phone to clear the "Logging in" screen
+                console.log(`[SUCCESS] ${num} Linked!`);
+                await delay(10000); // Give the phone time to stop loading
 
-                try {
-                    const credsFile = path.join(sessionFolder, 'creds.json');
-                    const creds = await fs.readJSON(credsFile);
-                    const sessionStr = Buffer.from(JSON.stringify(creds)).toString('base64');
-                    const finalID = `QueenLeesha~${sessionStr}`;
+                const creds = await fs.readJSON(path.join(sessionFolder, 'creds.json'));
+                const sessionStr = Buffer.from(JSON.stringify(creds)).toString('base64');
+                const finalID = `QueenLeesha~${sessionStr}`;
 
-                    const successText = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
-                                       `✅ *LINK SUCCESSFUL!*\n\n` +
-                                       `📦 *YOUR SESSION ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
-                                       `🚀 *Instructions:* Copy the long string above and use it as your SESSION_ID.\n\n` +
-                                       `© _devtrust_`;
+                const successText = `👑 *QUEEN LEESHA MD V1* 👑\n\n` +
+                                   `✅ *LINK SUCCESSFUL!*\n\n` +
+                                   `📦 *SESSION ID:* \n\n\`\`\`${finalID}\`\`\`\n\n` +
+                                   `🚀 *Use this ID to host your bot now!*`;
 
-                    await sock.sendMessage(sock.user.id, { text: successText });
-                    console.log(`[DONE] Session ID sent to DM of ${num}`);
-                    
-                    // Kill connection and delete folder after 5 seconds
-                    await delay(5000);
-                    sock.end();
-                    await fs.remove(sessionFolder);
-                } catch (readError) {
-                    console.error("[ERROR] Failed to read creds.json:", readError);
-                }
+                await sock.sendMessage(sock.user.id, { text: successText });
+                
+                await delay(5000);
+                sock.end();
+                await fs.remove(sessionFolder);
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode;
-                console.log(`[CLOSE] Connection closed. Reason: ${reason}`);
-                if (reason !== DisconnectReason.loggedOut) {
-                    // Cleanup folder if it failed to link
-                    await fs.remove(sessionFolder).catch(() => {});
-                }
+                console.log(`[CLOSE] ${num} closed with status: ${reason}`);
+                // Only wipe if it's not a temporary logout
+                if (reason !== 408) await fs.remove(sessionFolder).catch(() => {});
             }
         });
 
     } catch (err) {
         console.error("[CRASH]", err);
-        if (!res.headersSent) res.status(500).json({ error: "Server error. Try again." });
+        if (!res.headersSent) res.status(500).json({ error: "Server error." });
     }
 });
 
-app.listen(PORT, () => console.log(`Queen Leesha V9 online on port ${PORT}`));
+app.listen(PORT, () => console.log(`Queen Leesha V10 online on ${PORT}`));
